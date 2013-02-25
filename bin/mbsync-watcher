@@ -108,4 +108,7 @@ watch.createMonitor(mailbox, function (m) {
 
 setInterval(runmbsync, INTERVAL)
 
+// First run
+runmbsync()
+
 // vim: set filetype=javascript :
