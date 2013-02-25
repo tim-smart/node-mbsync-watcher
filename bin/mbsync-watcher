@@ -88,6 +88,8 @@ function runmbsync (folder, tosync) {
   current  = tosync
 
   sync.on('exit', function () {
+    console.error('[SYNC]', 'Complete', tosync)
+
     syncing = false
     current = null
 
