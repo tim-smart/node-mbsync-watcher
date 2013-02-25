@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+
+var watch        = require('watch')
+var path         = require('path')
+var childprocess = require('child_process')
+var channel      = process.argv[2]
+var mailbox      = process.argv[3]
+
+var MBSYNC       = 'mbsync'
+var INTERVAL     = 90000 // For full syncs
+
+if (!channel) {
+  console.error('No channel specified.')
+  return process.exit(1)
+}
+
+if (!mailbox) {
+  console.error('No mailbox specified.')
+  return process.exit(1)
+}
+
+mailbox = path.resolve(mailbox)
+
+function filetofolder (file) {
+  var folders = file.slice(mailbox.length + 1).split('/')
+  var out     = []
+  var folder  = ''
+  var stop    = false
+
+  for (var i = 0, il = folders.length; i < il; i++) {
+    folder = folders[i]
+
+    switch (folder) {
+    case 'cur':
+    case 'new':
+    case 'tmp':
+      stop = true
+      break
+    case 'Inbox':
+      out.push('INBOX')
+      stop = true
+      break
+    default:
+      if ('.' === folder[0]) folder = folder.slice(1)
+      if ('uidvalidity' === folder) break
+      out.push(folder)
+      break
+    }
+
+    if (stop) break
+  }
+
+  return out.join('/')
+}
+
+var current = null
+var queue   = []
+var syncing = false
+
+function runmbsync (folder, tosync) {
+  tosync || (tosync = channel)
+
+  if (folder) {
+    tosync = tosync + ':' + folder
+  }
+
+  if (syncing) {
+    if (
+       channel !== current
+    && channel !== queue[0]
+    && current !== tosync
+    && -1 === queue.indexOf(tosync)
+    ) {
+      if (channel === tosync) {
+        queue = [channel]
+      } else {
+        queue.unshift(tosync)
+      }
+    }
+
+    return
+  }
+
+  console.error('[SYNC]', tosync)
+
+  var sync = childprocess.spawn('mbsync', ['-q', tosync], { stdio : 'inherit' })
+  syncing  = true
+  current  = tosync
+
+  sync.on('exit', function () {
+    syncing = false
+    current = null
+
+    var next = queue.pop()
+    if (next) runmbsync(null, next)
+  })
+}
+
+function onchange (file) {
+  runmbsync(filetofolder(file))
+}
+
+watch.createMonitor(mailbox, function (m) {
+  m.on('created', onchange)
+  m.on('changed', onchange)
+  m.on('removed', onchange)
+})
+
+setInterval(runmbsync, INTERVAL)
+
+// vim: set filetype=javascript :

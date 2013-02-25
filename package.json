@@ -1,0 +1,23 @@
+{ "name" : "node-mbsync-watcher"
+, "version" : "0.0.1"
+, "author" : "Tim Smart <tim@fostle.com>"
+, "description" : "Watches for change in your maildir, and runs mbsync when change are found."
+, "engines" :
+  { "node" : ">=0.8.0"
+  }
+, "homepage" : "https://github.com/tim-smart/node-mbsync-watcher"
+, "repository" :
+  { "type" : "git"
+  , "url" : "git://github.com/tim-smart/node-mbsync-watcher.git"
+  }
+, "bugs" : {
+    "email" : "tim@fostle.com"
+  , "url" : "https://github.com/tim-smart/node-mbsync-watcher/issues"
+  }
+, "bin" :
+  { "node-mbsync-watcher" : "bin/node-mbsync-watcher"
+  }
+, "dependencies" :
+  { "watch" : "0.x"
+  }
+}
