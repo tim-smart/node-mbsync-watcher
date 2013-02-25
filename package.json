@@ -1,5 +1,5 @@
 { "name" : "mbsync-watcher"
-, "version" : "0.0.1"
+, "version" : "0.0.2"
 , "author" : "Tim Smart <tim@fostle.com>"
 , "description" : "Watches for change in your maildir, and runs mbsync when change are found."
 , "engines" :

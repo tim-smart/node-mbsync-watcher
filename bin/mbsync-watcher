@@ -83,7 +83,7 @@ function runmbsync (folder, tosync) {
 
   console.error('[SYNC]', tosync)
 
-  var sync = childprocess.spawn('mbsync', ['-q', tosync], { stdio : 'inherit' })
+  var sync = childprocess.spawn(MBSYNC, ['-q', tosync], { stdio : 'inherit' })
   syncing  = true
   current  = tosync
 
