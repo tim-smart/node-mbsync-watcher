@@ -1,4 +1,4 @@
-{ "name" : "node-mbsync-watcher"
+{ "name" : "mbsync-watcher"
 , "version" : "0.0.1"
 , "author" : "Tim Smart <tim@fostle.com>"
 , "description" : "Watches for change in your maildir, and runs mbsync when change are found."
@@ -15,7 +15,7 @@
   , "url" : "https://github.com/tim-smart/node-mbsync-watcher/issues"
   }
 , "bin" :
-  { "node-mbsync-watcher" : "bin/node-mbsync-watcher"
+  { "mbsync-watcher" : "bin/mbsync-watcher"
   }
 , "dependencies" :
   { "watch" : "0.x"
