@@ -5,7 +5,7 @@
 
 Install with npm:
 
-    npm install node-mbsync-watcher
+    npm install -g mbsync-watcher
 
 
 ## Usage
