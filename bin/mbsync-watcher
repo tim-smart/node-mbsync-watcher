@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-var watch        = require('watch')
+var watch        = require('node-watch')
 var path         = require('path')
 var childprocess = require('child_process')
 var channel      = process.argv[2]
 var mailbox      = process.argv[3]
 
 var MBSYNC       = 'mbsync'
-var INTERVAL     = 90000 // For full syncs
+var INTERVAL     = 60000 // For full syncs
 
 if (!channel) {
   console.error('No channel specified.')
@@ -19,7 +19,7 @@ if (!mailbox) {
   return process.exit(1)
 }
 
-mailbox = path.resolve(mailbox)
+mailbox         = path.resolve(mailbox)
 
 function filetofolder (file) {
   var folders = file.slice(mailbox.length + 1).split('/')
@@ -102,15 +102,24 @@ function onchange (file) {
   runmbsync(filetofolder(file))
 }
 
-watch.createMonitor(mailbox, function (m) {
-  m.on('created', onchange)
-  m.on('changed', onchange)
-  m.on('removed', onchange)
-})
+var fullcounter = 0
 
-setInterval(runmbsync, INTERVAL)
+function dofullsync () {
+  // Sync all folders every 4.5 minutes
+  if (4 <= fullcounter) {
+    fullcounter = 0
+    runmbsync()
+    return
+  }
+
+  runmbsync('INBOX')
+  ;++fullcounter
+}
+
+setInterval(dofullsync, INTERVAL)
 
 // First run
 runmbsync()
+watch(mailbox, onchange)
 
 // vim: set filetype=javascript :

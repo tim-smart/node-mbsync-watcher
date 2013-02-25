@@ -18,6 +18,6 @@
   { "mbsync-watcher" : "bin/mbsync-watcher"
   }
 , "dependencies" :
-  { "watch" : "0.x"
+  { "node-watch" : "0.2.x"
   }
 }
