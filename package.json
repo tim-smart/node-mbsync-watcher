@@ -19,5 +19,6 @@
   }
 , "dependencies" :
   { "node-watch" : "0.2.x"
+  , "dateformat" : "1.x"
   }
 }

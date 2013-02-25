@@ -3,6 +3,7 @@
 var watch        = require('node-watch')
 var path         = require('path')
 var childprocess = require('child_process')
+var datef        = require('dateformat')
 var channel      = process.argv[2]
 var mailbox      = process.argv[3]
 
@@ -20,6 +21,17 @@ if (!mailbox) {
 }
 
 mailbox         = path.resolve(mailbox)
+
+function log () {
+  var message =
+    [ datef(new Date, 'yyyy-mm-dd HH:MM:ss')
+    , '[SYNC]'
+    ]
+
+  message.push.apply(message, arguments)
+
+  console.error(message.join(' - '))
+}
 
 function filetofolder (file) {
   var folders = file.slice(mailbox.length + 1).split('/')
@@ -81,14 +93,14 @@ function runmbsync (folder, tosync) {
     return
   }
 
-  console.error('[SYNC]', tosync)
+  log(tosync)
 
   var sync = childprocess.spawn(MBSYNC, ['-q', tosync], { stdio : 'inherit' })
   syncing  = true
   current  = tosync
 
   sync.on('exit', function () {
-    console.error('[SYNC]', 'Complete', tosync)
+    log(tosync, 'COMPLETE')
 
     syncing = false
     current = null
