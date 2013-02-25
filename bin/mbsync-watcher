@@ -78,11 +78,12 @@ function runmbsync (folder, tosync) {
 
   if (syncing) {
     if (
-       channel !== current
-    && channel !== queue[0]
-    && current !== tosync
+       channel !== queue[0]
+    && !(channel === current && channel === tosync)
     && -1 === queue.indexOf(tosync)
     ) {
+      log('QUEUED', tosync)
+
       if (channel === tosync) {
         queue = [channel]
       } else {
@@ -95,11 +96,72 @@ function runmbsync (folder, tosync) {
 
   log(tosync)
 
-  var sync = childprocess.spawn(MBSYNC, ['-q', tosync], { stdio : 'inherit' })
-  syncing  = true
-  current  = tosync
+  var sync      = childprocess.spawn(MBSYNC, [tosync])
+  var buffer    = []
+  var previous  = []
+  syncing       = true
+  current       = tosync
+
+  function checkqueue () {
+    var tocheck = ''
+    var index   = 0
+
+    for (var i = 0, il = previous.length; i < il; i++) {
+      tocheck = previous[i]
+
+      index = queue.indexOf(tocheck)
+      if (-1 === index) continue
+
+      queue.splice(index, 1)
+      log('UNQUEUED', tocheck)
+
+      previous = []
+    }
+  }
+
+  function checkchanges () {
+    var string  = buffer.join('')
+    var regex   = /\nSelecting slave (.*)\.\.\.\n/
+    var match   = null
+    var matches = []
+    var tocheck = ''
+    var index   = 0
+
+    while (match = string.match(regex)) {
+      string   = string.slice(match.index + match[0].length)
+      tocheck  = channel + ':' + match[1]
+      matches.push(tocheck)
+
+      if (tosync !== tocheck) {
+        log(tosync, 'MAILBOX', match[1])
+      }
+    }
+
+    // Queue
+    if (0 < matches.length) {
+      setTimeout(function () {
+        checkqueue()
+        previous = matches
+      }, 500)
+    }
+
+    buffer = [string]
+  }
+
+  sync.stdout.setEncoding('utf8')
+  sync.stdout.on('readable', function () {
+    buffer.push(sync.stdout.read())
+    checkchanges()
+  })
+
+  sync.stderr.setEncoding('utf8')
+  sync.stderr.on('readable', function () {
+    buffer.push(sync.stderr.read())
+    checkchanges()
+  })
 
   sync.on('exit', function () {
+    setTimeout(checkqueue, 500)
     log(tosync, 'COMPLETE')
 
     syncing = false
@@ -117,7 +179,7 @@ function onchange (file) {
 var fullcounter = 0
 
 function dofullsync () {
-  // Sync all folders every 4.5 minutes
+  // Sync all folders every 5 minutes
   if (4 <= fullcounter) {
     fullcounter = 0
     runmbsync()
