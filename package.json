@@ -14,11 +14,11 @@
     "email" : "tim@fostle.com"
   , "url" : "https://github.com/tim-smart/node-mbsync-watcher/issues"
   }
+, "main" : "./lib/mbsync-watcher.js"
 , "bin" :
   { "mbsync-watcher" : "bin/mbsync-watcher"
   }
 , "dependencies" :
-  { "node-watch" : "0.2.x"
-  , "dateformat" : "1.x"
+  { "dateformat" : "1.x"
   }
 }

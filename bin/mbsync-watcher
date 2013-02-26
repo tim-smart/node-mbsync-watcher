@@ -1,17 +1,11 @@
 #!/usr/bin/env node
 
-var watch        = require('node-watch')
-var path         = require('path')
-var childprocess = require('child_process')
+var Watcher      = require('../')
 var datef        = require('dateformat')
 var channel      = process.argv[2]
 var mailbox      = process.argv[3]
 var mailboxes    = process.argv[4]
 var blacklist    = process.argv[5]
-
-var MBSYNC       = 'mbsync'
-var INTERVAL     = 60000 // For full syncs
-var WATCHBOXES   = 'INBOX'
 
 if (!channel) {
   console.error('No channel specified.')
@@ -24,8 +18,10 @@ if (!mailbox) {
 }
 
 if (mailboxes) {
-  WATCHBOXES = mailboxes.split(',')
-  WATCHBOXES.map(function (box) { return box.trim() })
+  mailboxes = mailboxes.split(',')
+  mailboxes.map(function (box) { return box.trim() })
+} else {
+  mailboxes = []
 }
 
 if (blacklist) {
@@ -35,220 +31,30 @@ if (blacklist) {
   blacklist = []
 }
 
-function log () {
-  var message =
-    [ datef(new Date, 'yyyy-mm-dd HH:MM:ss')
-    , '[SYNC]'
-    ]
-
-  message.push.apply(message, arguments)
-
-  console.error(message.join(' - '))
-}
-
-function filetofolders (file) {
-  var folders = file.slice(mailbox.length + 1).split('/')
-  var out     = []
-  var folder  = ''
-  var stop    = false
-
-  for (var i = 0, il = folders.length; i < il; i++) {
-    folder = folders[i]
-
-    switch (folder) {
-    case 'cur':
-    case 'new':
-    case 'tmp':
-      stop = true
-      break
-    case 'Inbox':
-      out.push('INBOX')
-      stop = true
-      break
-    default:
-      if ('.' === folder[0]) folder = folder.slice(1)
-      if ('uidvalidity' === folder) break
-      out.push(folder)
-      break
-    }
-
-    if (stop) break
+var options      =
+  { channel      : channel
+  , maildir      : mailbox
+  , important    : ['INBOX']
+  , unimportant  : blacklist
+  , dependencies : { INBOX : mailboxes }
   }
 
-  out = out.join('/')
+var watcher     = new Watcher(options)
 
-  if (-1 !== WATCHBOXES.indexOf(out)) {
-    return WATCHBOXES
-  }
-
-  if (-1 !== blacklist.indexOf(out)) {
-    return false
-  }
-
-  return out
-}
-
-var current  = []
-var queue    = []
-var previous = []
-var syncing  = false
-
-function checkqueue () {
-  var tocheck = ''
-  var index   = 0
-
-  for (var i = 0, il = previous.length; i < il; i++) {
-    tocheck = previous[i]
-
-    if (-1 !== current.indexOf(tocheck)) {
-      index = queue.indexOf(tocheck)
-      if (-1 === index) continue
-
-      queue.splice(index, 1)
-      log('UNQUEUED', tocheck)
-      continue
-    }
-
-    if (queue[0] !== tocheck) continue
-
-    queue.shift()
-    log('UNQUEUED', tocheck)
-    break
-  }
-
-  if (!syncing) {
-    previous = []
-    if (0 < queue.length) runmbsync(false)
-  }
-}
-
-function runmbsync (folders) {
-  var tosync = []
-
-  if (folders) {
-    if (Array.isArray(folders)) {
-      for (var i = 0, il = folders.length; i < il; i++) {
-        tosync.push(channel + ':' + folders[i])
-      }
-    } else {
-      tosync.push(channel + ':' + folders)
-    }
-  } else if (false !== folders) {
-    tosync.push(channel)
-  }
-
-  if (syncing) {
-    var ctosync = ''
-    var updated = false
-
-    for (var i = 0, il = tosync.length; i < il; i++) {
-      ctosync = tosync[i]
-
-      if (
-         channel !== queue[0]
-      && !(channel === current[0] && channel === ctosync)
-      && -1 === queue.indexOf(ctosync)
-      ) {
-        if (channel === ctosync) {
-          queue   = [channel]
-          break;
-
-        } else {
-          queue.push(ctosync)
-        }
-
-        updated = true
-      }
-    }
-
-    if (updated) log('QUEUEUPDATE', queue.join(','))
-
-    return
-  }
-
-  tosync.push.apply(tosync, queue)
-  queue         = []
-
-  log('JOBSTART', tosync.join(','))
-
-  var sync      = childprocess.spawn(MBSYNC, tosync)
-  var buffer    = []
-  syncing       = true
-  current       = tosync
-
-  function checkchanges () {
-    var string  = buffer.join('')
-    var regex   = /\nSelecting slave (.*)\.\.\.\n/
-    var match   = null
-    var matches = []
-    var tocheck = ''
-    var index   = 0
-
-    while (match = string.match(regex)) {
-      string   = string.slice(match.index + match[0].length)
-      tocheck  = channel + ':' + match[1]
-      matches.push(tocheck)
-    }
-
-    // Queue
-    if (!syncing || 0 < matches.length) {
-      for (var i = 0, il = previous.length; i < il; i++) {
-        log('DONE', previous[i])
-      }
-
-      if (!syncing) log('JOBFINISH', tosync.join(','))
-
-      setTimeout(function () {
-        checkqueue()
-        previous = matches
-      }, 500)
-    }
-
-    buffer = [string]
-  }
-
-  sync.stdout.setEncoding('utf8')
-  sync.stdout.on('readable', function () {
-    buffer.push(sync.stdout.read())
-    checkchanges()
-  })
-
-  sync.stderr.setEncoding('utf8')
-  sync.stderr.on('readable', function () {
-    buffer.push(sync.stderr.read())
-    checkchanges()
-  })
-
-  sync.on('exit', function () {
-    process.nextTick(checkchanges)
-
-    syncing = false
-    current = []
+function logevent (event, limit) {
+  watcher.on(event, function () {
+    var message = [event]
+    var args    = []
+    args.push.apply(args, arguments)
+    args        = args.slice(0, limit)
+    message.push.apply(message, args)
+    console.error(datef(new Date, 'yyyy-mm-dd HH:MM:ss'), message.join(' - '))
   })
 }
 
-function onchange (file) {
-  runmbsync(filetofolders(file))
-}
-
-var fullcounter = 0
-
-function dofullsync () {
-  // Sync all folders every 5 minutes
-  if (4 <= fullcounter) {
-    fullcounter = 0
-    runmbsync()
-    return
-  }
-
-  runmbsync(WATCHBOXES)
-  ;++fullcounter
-}
-
-setInterval(dofullsync, INTERVAL)
-
-// First run
-runmbsync()
-watch(mailbox, onchange)
+logevent('loaded', 0)
+logevent('interval:shorttime', 1)
+logevent('process:spawn', 1)
+logevent('process:exit', 1)
 
 // vim: set filetype=javascript :
