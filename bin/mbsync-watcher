@@ -6,9 +6,12 @@ var childprocess = require('child_process')
 var datef        = require('dateformat')
 var channel      = process.argv[2]
 var mailbox      = process.argv[3]
+var mailboxes    = process.argv[4]
+var blacklist    = process.argv[5]
 
 var MBSYNC       = 'mbsync'
 var INTERVAL     = 60000 // For full syncs
+var WATCHBOXES   = 'INBOX'
 
 if (!channel) {
   console.error('No channel specified.')
@@ -20,7 +23,17 @@ if (!mailbox) {
   return process.exit(1)
 }
 
-mailbox         = path.resolve(mailbox)
+if (mailboxes) {
+  WATCHBOXES = mailboxes.split(',')
+  WATCHBOXES.map(function (box) { return box.trim() })
+}
+
+if (blacklist) {
+  blacklist = blacklist.split(',')
+  blacklist.map(function (box) { return box.trim() })
+} else {
+  blacklist = []
+}
 
 function log () {
   var message =
@@ -33,7 +46,7 @@ function log () {
   console.error(message.join(' - '))
 }
 
-function filetofolder (file) {
+function filetofolders (file) {
   var folders = file.slice(mailbox.length + 1).split('/')
   var out     = []
   var folder  = ''
@@ -62,62 +75,106 @@ function filetofolder (file) {
     if (stop) break
   }
 
-  return out.join('/')
+  out = out.join('/')
+
+  if (-1 !== WATCHBOXES.indexOf(out)) {
+    return WATCHBOXES
+  }
+
+  if (-1 !== blacklist.indexOf(out)) {
+    return false
+  }
+
+  return out
 }
 
-var current = null
-var queue   = []
-var syncing = false
+var current  = []
+var queue    = []
+var previous = []
+var syncing  = false
 
-function runmbsync (folder, tosync) {
-  tosync || (tosync = channel)
+function checkqueue () {
+  var tocheck = ''
+  var index   = 0
 
-  if (folder) {
-    tosync = tosync + ':' + folder
-  }
+  for (var i = 0, il = previous.length; i < il; i++) {
+    tocheck = previous[i]
 
-  if (syncing) {
-    if (
-       channel !== queue[0]
-    && !(channel === current && channel === tosync)
-    && -1 === queue.indexOf(tosync)
-    ) {
-      log('QUEUED', tosync)
-
-      if (channel === tosync) {
-        queue = [channel]
-      } else {
-        queue.unshift(tosync)
-      }
-    }
-
-    return
-  }
-
-  log(tosync)
-
-  var sync      = childprocess.spawn(MBSYNC, [tosync])
-  var buffer    = []
-  var previous  = []
-  syncing       = true
-  current       = tosync
-
-  function checkqueue () {
-    var tocheck = ''
-    var index   = 0
-
-    for (var i = 0, il = previous.length; i < il; i++) {
-      tocheck = previous[i]
-
+    if (-1 !== current.indexOf(tocheck)) {
       index = queue.indexOf(tocheck)
       if (-1 === index) continue
 
       queue.splice(index, 1)
       log('UNQUEUED', tocheck)
-
-      previous = []
+      continue
     }
+
+    if (queue[0] !== tocheck) continue
+
+    queue.shift()
+    log('UNQUEUED', tocheck)
+    break
   }
+
+  if (!syncing) {
+    previous = []
+    if (0 < queue.length) runmbsync(false)
+  }
+}
+
+function runmbsync (folders) {
+  var tosync = []
+
+  if (folders) {
+    if (Array.isArray(folders)) {
+      for (var i = 0, il = folders.length; i < il; i++) {
+        tosync.push(channel + ':' + folders[i])
+      }
+    } else {
+      tosync.push(channel + ':' + folders)
+    }
+  } else if (false !== folders) {
+    tosync.push(channel)
+  }
+
+  if (syncing) {
+    var ctosync = ''
+    var updated = false
+
+    for (var i = 0, il = tosync.length; i < il; i++) {
+      ctosync = tosync[i]
+
+      if (
+         channel !== queue[0]
+      && !(channel === current[0] && channel === ctosync)
+      && -1 === queue.indexOf(ctosync)
+      ) {
+        if (channel === ctosync) {
+          queue   = [channel]
+          break;
+
+        } else {
+          queue.push(ctosync)
+        }
+
+        updated = true
+      }
+    }
+
+    if (updated) log('QUEUEUPDATE', queue.join(','))
+
+    return
+  }
+
+  tosync.push.apply(tosync, queue)
+  queue         = []
+
+  log('JOBSTART', tosync.join(','))
+
+  var sync      = childprocess.spawn(MBSYNC, tosync)
+  var buffer    = []
+  syncing       = true
+  current       = tosync
 
   function checkchanges () {
     var string  = buffer.join('')
@@ -131,14 +188,16 @@ function runmbsync (folder, tosync) {
       string   = string.slice(match.index + match[0].length)
       tocheck  = channel + ':' + match[1]
       matches.push(tocheck)
-
-      if (tosync !== tocheck) {
-        log(tosync, 'MAILBOX', match[1])
-      }
     }
 
     // Queue
-    if (0 < matches.length) {
+    if (!syncing || 0 < matches.length) {
+      for (var i = 0, il = previous.length; i < il; i++) {
+        log('DONE', previous[i])
+      }
+
+      if (!syncing) log('JOBFINISH', tosync.join(','))
+
       setTimeout(function () {
         checkqueue()
         previous = matches
@@ -161,19 +220,15 @@ function runmbsync (folder, tosync) {
   })
 
   sync.on('exit', function () {
-    setTimeout(checkqueue, 500)
-    log(tosync, 'COMPLETE')
+    process.nextTick(checkchanges)
 
     syncing = false
-    current = null
-
-    var next = queue.pop()
-    if (next) runmbsync(null, next)
+    current = []
   })
 }
 
 function onchange (file) {
-  runmbsync(filetofolder(file))
+  runmbsync(filetofolders(file))
 }
 
 var fullcounter = 0
@@ -186,7 +241,7 @@ function dofullsync () {
     return
   }
 
-  runmbsync('INBOX')
+  runmbsync(WATCHBOXES)
   ;++fullcounter
 }
 
