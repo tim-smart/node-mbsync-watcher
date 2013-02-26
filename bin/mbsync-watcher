@@ -53,7 +53,9 @@ function logevent (event, limit) {
 }
 
 logevent('loaded', 0)
-logevent('interval:shorttime', 1)
+logevent('interval:shorttime', 0)
+logevent('interval:mediumtime', 0)
+logevent('interval:longtime', 0)
 logevent('process:spawn', 1)
 logevent('process:exit', 1)
 
