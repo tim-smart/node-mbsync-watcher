@@ -6,6 +6,7 @@ var channel      = process.argv[2]
 var mailbox      = process.argv[3]
 var mailboxes    = process.argv[4]
 var blacklist    = process.argv[5]
+var scripts      = process.argv[6]
 
 if (!channel) {
   console.error('No channel specified.')
@@ -37,6 +38,7 @@ var options      =
   , important    : ['INBOX']
   , unimportant  : blacklist
   , dependencies : { INBOX : mailboxes }
+  , scripts      : scripts ? scripts.split(',') : []
   }
 
 var watcher     = new Watcher(options)
